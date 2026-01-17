@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WORDKKE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #121213;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+    overflow-x: hidden;
+}
+h1 {
+    margin: 16px 0 8px;
+    letter-spacing: 4px;
+    font-size: 6vw;
+    color: #7CFF7C;
+}
+#credit {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 3vw;
+    color: #9aff9a;
+}
+#board {
+    display: grid;
+    grid-template-rows: repeat(6, 1fr);
+    gap: 2vw;
+    margin-bottom: 4vw;
+}
+.row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2vw;
+}
+.tile {
+    width: 14vw;
+    height: 14vw;
+    border: 2px solid #3a3a3c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6vw;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.correct { background: #538d4e; border-color: #538d4e; }
+.present { background: #b59f3b; border-color: #b59f3b; }
+.absent  { background: #3a3a3c; border-color: #3a3a3c; }
+
+#keyboard {
+    margin-bottom: 4vw;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.key-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2vw;
+}
+.key {
+    background: #818384;
+    color: white;
+    border: none;
+    margin: 0.5vw;
+    padding: 3vw 1.5vw;
+    font-size: 4vw;
+    border-radius: 6px;
+    cursor: pointer;
+    min-width: 12vw;
+}
+.key.wide { min-width: 18vw; }
+
+#overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 8vw;
+    font-weight: bold;
+    z-index: 100;
+    white-space: pre-line;
+}
+.confetti {
+    position: fixed;
+    top: -10px;
+    width: 2vw;
+    height: 2.8vw;
+    opacity: 0.9;
+    animation: fall linear forwards;
+}
+@keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="credit">Made by Lucaa ©</div>
+<h1>WORDKKE</h1>
+<div id="board"></div>
+<div id="keyboard"></div>
+<div id="overlay"></div>
+
+<script>
+const WORDS = [
+ "APPLE","HOUSE","PLANT","WATER","MONEY","LIGHT","CHAIR","TABLE",
+ "HEART","BRAVE","SUGAR","BREAD","CLOUD","TRAIN","ROBOT","MOUSE",
+ "HORSE","SWEET","SPOON","STARS","DREAM","VOICE","BRAIN","LEVEL",
+ "PRIDE","SHINE","GHOST","CROWN","WORLD","BRUSH","TRUTH"
+];
+
+let WORD = "";
+let currentRow = 0;
+let currentCol = 0;
+const rows = 6, cols = 5;
+let board = [];
+const boardEl = document.getElementById("board");
+const overlay = document.getElementById("overlay");
+
+/* Sounds */
+function playWinSound() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const g = ctx.createGain(); g.connect(ctx.destination);
+    [523,659,784].forEach((f,i)=>{ const o=ctx.createOscillator(); o.frequency.value=f; o.connect(g); g.gain.value=0.15; o.start(ctx.currentTime+i*0.15); o.stop(ctx.currentTime+i*0.15+0.3); });
+}
+function playLoseSound() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.frequency.value = 180; g.gain.value = 0.2; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.6);
+}
+
+/* Board */
+for (let r=0;r<rows;r++){
+    const row=document.createElement("div"); row.className="row"; board[r]=[];
+    for(let c=0;c<cols;c++){ const tile=document.createElement("div"); tile.className="tile"; row.appendChild(tile); board[r][c]=tile; }
+    boardEl.appendChild(row);
+}
+
+/* Keyboard */
+const keys=["QWERTYUIOP","ASDFGHJKL","ENTERZXCVBNM⌫"];
+const keyboard=document.getElementById("keyboard");
+let keyEls = {};
+keys.forEach(r=>{
+    const row=document.createElement("div"); row.className="key-row";
+    [...r].forEach(k=>{
+        const key=document.createElement("button"); key.textContent=k; key.className="key";
+        if(k==="ENTER"||k==="⌫") key.classList.add("wide");
+        key.onclick=()=>handleKey(k); row.appendChild(key);
+        if(k!=="ENTER"&&k!=="⌫") keyEls[k] = key;
+    });
+    keyboard.appendChild(row);
+});
+
+function handleKey(key){
+    if(overlay.style.display==="flex") return;
+    if(key==="⌫"){ if(currentCol>0){ currentCol--; board[currentRow][currentCol].textContent=""; } return; }
+    if(key==="ENTER"){ if(currentCol===5) checkWord(); return; }
+    if(currentCol<5){ board[currentRow][currentCol].textContent=key; currentCol++; }
+}
+
+function checkWord(){
+    let guess=""; for(let c=0;c<5;c++) guess+=board[currentRow][c].textContent;
+    let letters=WORD.split("");
+    // First correct
+    for(let i=0;i<5;i++){
+        if(guess[i]===WORD[i]){
+            board[currentRow][i].classList.add("correct");
+            letters[i]=null;
+            if(keyEls[guess[i]]) keyEls[guess[i]].style.background="#538d4e";
+        }
+    }
+    // Then present
+    for(let i=0;i<5;i++){
+        if(!board[currentRow][i].classList.contains("correct")){
+            let idx=letters.indexOf(guess[i]);
+            if(idx>=0){
+                board[currentRow][i].classList.add("present");
+                letters[idx]=null;
+                if(keyEls[guess[i]] && keyEls[guess[i]].style.background!=="#538d4e")
+                    keyEls[guess[i]].style.background="#b59f3b";
+            } else {
+                board[currentRow][i].classList.add("absent");
+                if(keyEls[guess[i]] && keyEls[guess[i]].style.background==="" ) keyEls[guess[i]].style.background="#3a3a3c";
+            }
+        }
+    }
+    if(guess===WORD){ showEnd("🎉 CONGRATULATIONS!",true); playWinSound(); return; }
+    currentRow++; currentCol=0;
+    if(currentRow===6){ showEnd("❌ YOU LOST!\nCORRECT WORD: "+WORD); playLoseSound(); }
+}
+
+function showEnd(text,win=false){
+    overlay.innerText=text; overlay.style.display="flex";
+    if(win) launchConfetti();
+    setTimeout(()=>{ overlay.style.display="none"; newRound(); },4000);
+}
+
+function launchConfetti(){
+    for(let i=0;i<100;i++){
+        const c=document.createElement("div"); c.className="confetti";
+        c.style.left=Math.random()*100+"vw";
+        c.style.background=`hsl(${Math.random()*360},100%,50%)`;
+        c.style.animationDuration=(2.5+Math.random())+"s";
+        document.body.appendChild(c);
+        setTimeout(()=>c.remove(),3000);
+    }
+}
+
+function newRound(){
+    WORD = WORDS[Math.floor(Math.random()*WORDS.length)];
+    currentRow = 0; currentCol = 0;
+    for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ board[r][c].textContent=""; board[r][c].className="tile"; } }
+    for(let k in keyEls){ keyEls[k].style.background="#818384"; }
+}
+
+newRound();
+document.addEventListener("keydown",e=>{
+    let k=e.key.toUpperCase();
+    if(k==="BACKSPACE") k="⌫";
+    if(k==="ENTER"||k==="⌫"||/^[A-Z]$/.test(k)) handleKey(k);
+});
+</script>
+</body>
+</html>
